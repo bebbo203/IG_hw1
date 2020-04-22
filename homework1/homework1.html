@@ -1,43 +1,242 @@
 <!DOCTYPE html>
 <html>
+    
 
-<script id="vertex-shader" type="x-shader/x-vertex">
-#version 300 es
 
-in  vec4 aPosition;
-in  vec4 aColor;
-out vec4 vColor;
+    <script id="vertex-shader" type="x-shader/x-vertex">
+        #version 300 es
 
-void main()
-{
-    vColor = aColor;
-    gl_Position = aPosition;
-}
-</script>
+        in vec4 aPosition;
+        in vec4 aNormal;
+        in vec2 aTexCoord;
+        
+        out vec4 glPosition, vPosition;   
+        out vec4 vSpotLightDirection, vSpotLightPosition, vColor_spot;
+        out vec4 vLightPositionDir;
+        out float vCutoff, vAlpha;
+        out vec4 vNormal;
+        out vec4 Ci_dir, Ci_spot, Cs_dir, Cs_spot;
+        out float vTextureON;
+       
+        out vec2 vTexCoord;
 
-<script id="fragment-shader" type="x-shader/x-fragment">
-#version 300 es
+        uniform mat4 uModelViewMatrix, uProjectionMatrix;
+        
+        uniform vec4 uGlobalLightProduct;
 
-precision mediump float;
+        uniform vec4 uAmbientProductDir, uDiffuseProductDir, uSpecularProductDir, uLightPositionDir;
+        uniform vec4 uAmbientProductSpot, uDiffuseProductSpot, uSpecularProductSpot, uSpotLightDirection, uSpotLightPosition;
 
-in vec4 vColor;
-out vec4 fColor;
+        uniform float uShininess, uCutoff, uAlpha, uTextureON;
+    
+        
 
-void
-main()
-{
-    fColor = vColor;
+        vec4 oPosition; 
+        vec3 L;
 
-}
-</script>
+        void main()
+        {
+            oPosition = uModelViewMatrix * aPosition;
+            L = normalize((uModelViewMatrix * uLightPositionDir - oPosition).xyz);
+            
+            vec3 E = normalize(-oPosition.xyz);
+            vec3 H = normalize(L + E);
+            vec3 N = normalize((uModelViewMatrix*aNormal).xyz);
+            
+            vec4 ambient = uAmbientProductDir;
+            
+            float Kd = max(dot(L, N), 0.0 );
+            vec4  diffuse = Kd*uDiffuseProductDir;
+            
+            float Ks = pow( max(dot(N, H), 0.0), uShininess);
+            vec4  specular = Ks * uSpecularProductDir;
 
-<script type="text/javascript" src="../Common/InitShaders.js"></script>
-<script type="text/javascript" src="../Common/MVnew.js"></script>
-<script type="text/javascript" src="homework1.js"></script>
+            
+            
+            vec3 L_spot = normalize((uModelViewMatrix * uSpotLightPosition - oPosition).xyz);
+            vec3 H_spot = normalize(L_spot + E);
+            vec4 ambient_spot = uAmbientProductSpot;
+            float Kd_spot = max(dot(L_spot, N), 0.0);
+            vec4 diffuse_spot = Kd_spot*uDiffuseProductSpot;
+            float Ks_spot = pow( max(dot(N, H_spot), 0.0), uShininess);
+            vec4 specular_spot = Ks_spot * uSpecularProductSpot;
+            
+            
+    
+            
 
-<body>
-<canvas id="gl-canvas" width="1024" height="1024">
-Oops ... your browser doesn't support the HTML5 canvas element
-</canvas>
-</body>
+            
+            Ci_dir = uGlobalLightProduct + uAmbientProductDir  + uDiffuseProductDir;
+            Cs_dir = uGlobalLightProduct + uAmbientProductDir ;
+            Ci_spot = uGlobalLightProduct + uAmbientProductSpot + uDiffuseProductSpot;
+            Cs_spot = uGlobalLightProduct + uAmbientProductSpot;
+            
+
+            
+           
+
+            vSpotLightPosition = uSpotLightPosition;
+            vSpotLightDirection = uSpotLightDirection;
+            vNormal = aNormal;
+            vPosition = oPosition;
+            vCutoff = uCutoff;
+            oPosition = uProjectionMatrix*uModelViewMatrix*aPosition;
+
+            vAlpha = uAlpha;
+            vTexCoord = aTexCoord;
+            gl_Position = uProjectionMatrix * uModelViewMatrix * aPosition;
+            vLightPositionDir = uLightPositionDir;
+            vTextureON = uTextureON;
+        }
+    </script>
+
+    <script id="fragment-shader" type="x-shader/x-fragment">
+        #version 300 es
+
+        precision mediump float;
+
+        in vec2 vTexCoord;
+
+        in vec4 vColor, vColor_spot;
+        in vec4 vSpotLightDirection, vSpotLightPosition;
+        
+        in vec4 vPosition, vNormal;
+        in float vCutoff, vAlpha, vTextureON;
+        in vec4 Ci, Cs;
+        in vec4 vLightPositionDir;
+        in vec4 Ci_dir, Ci_spot, Cs_dir, Cs_spot;
+
+        out vec4 fColor;
+       
+        uniform sampler2D uTextureMap;
+       
+        
+
+        void main()
+        {
+
+
+            vec4 L_dir = normalize(vPosition - vLightPositionDir);
+
+            if(dot(L_dir,vNormal) > 0.5)
+                fColor += Ci_dir;
+            else
+                fColor += Cs_dir;
+
+            
+            vec4 spotToVertex = normalize(vPosition - vSpotLightPosition);
+            float vSpotProd = dot(spotToVertex, -vSpotLightDirection);
+            
+            
+
+            if(vSpotProd >= vCutoff)
+            {
+                fColor += Ci_spot * pow(vSpotProd, vAlpha);  
+            }
+            
+            
+            fColor += texture(uTextureMap, vTexCoord) * vTextureON;
+
+           
+
+        }
+    </script>
+
+    <script type="text/javascript" src="../Common/InitShaders.js"></script>
+    <script type="text/javascript" src="../Common/MVnew.js"></script>
+    <script type="text/javascript" src="homework1.js"></script>
+
+    <body>
+        <div style="float: left;">
+            <canvas id="gl-canvas" width="1024" height="1024">
+                Oops ... your browser doesn't support the HTML5 canvas element
+                </canvas>
+        </div>
+        <div style="background-color:lightblue">
+            <div>
+                zNear  <input id="zNearSlider" type="range"
+                min="-2" max="2" step="0.1" value="1.40" />
+                <h id="zNearLabel"> 1.40 </h>
+            </div>
+            <div>
+                zFar   <input id="zFarSlider" type="range"
+                min="3" max="10" step="3.0" value="3" />
+                <h id="zFarLabel"> 3 </h>
+            </div>
+            <div>
+                radius  <input id="radiusSlider" type="range"
+                min="0.05" max="10" step="0.1" value="4" />
+                <h id="radiusLabel"> 3 </h>
+            </div>
+            <div>
+                theta     <input id="thetaSlider" type="range"
+                min="-90" max="90" step="5" value="0" />
+                <h id="thetaLabel"> 0 </h>
+            </div>
+            <div>
+                phi     <input id="phiSlider" type="range"
+                min="-90" max="90" step="5" value="0" />
+                <h id="phiLabel"> 0 </h>
+            </div>
+            <div>
+                fov     <input id="fovSlider" type="range"
+                min="10" max="120" step="5" value="45" />
+                <h id="fovLabel"> 45 </h>
+            </div>
+            <div>
+                aspect  <input id="aspectSlider" type="range"
+                min="0.5" max="2" step="0.1" value="1" />
+                <h id="aspectLabel"> 1 </h>
+            </div>
+        
+        </div>
+        <div style="background-color:lightyellow">
+            <div>
+                cutoff  <input id="cutoffSlider" type="range"
+                min="0" max="1" step="0.01" value="0.19" />
+                <h id="cutoffLabel"> 0.19 </h>
+            </div>
+            <div>
+                alpha <input id="alphaSlider" type="range"
+                min="0" max="5" step="0.01" value="1.52" />
+                <h id="alphaLabel"> 1.52 </h>
+            </div>
+            <div>
+                xPos <input id="xPosSlider" type="range"
+                min="-1" max="1" step="0.1" value="0" />
+                <h id="xPosLabel"> 0 </h>
+            </div>
+            <div>
+                yPos  <input id="yPosSlider" type="range"
+                min="-1" max="1" step="0.1" value="0.3" />
+                <h id="yPosLabel"> 0.3 </h>
+            </div>
+            <div>
+                zPos  <input id="zPosSlider" type="range"
+                min="-10" max="1" step="0.1" value="-4.2" />
+                <h id="zPosLabel"> -4.2 </h>
+            </div>
+            <div>
+                xDir <input id="xDirSlider" type="range"
+                min="-1" max="1" step="0.1" value="0" />
+                <h id="xDirLabel"> 0 </h>
+            </div>
+            <div>
+                yDir  <input id="yDirSlider" type="range"
+                min="-1" max="1" step="0.1" value="0" />
+                <h id="yDirLabel"> 0 </h>
+            </div>
+            <div>
+                zDir  <input id="zDirSlider" type="range"
+                min="-1" max="1" step="0.1" value="-0.4" />
+                <h id="zDirLabel"> -0.4 </h>
+            </div>
+        </div>
+        <div >
+            <div style="background-color:lightgrey">
+                <button id="textureButton"> TEXTURE </button>
+            </div>
+        </div>
+        <img id = "texImage" src = "tex.png" hidden></img>
+    </body>
 </html>
